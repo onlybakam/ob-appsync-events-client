@@ -6,7 +6,7 @@
   "files": ["dist"],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc -p tsconfig.declarations.json",
+    "build": "tsc -p && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
