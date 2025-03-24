@@ -2,9 +2,15 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import { AppSyncEventsClient, useChannel } from '../lib/main'
 
+const client = new AppSyncEventsClient(import.meta.env.VITE_HTTP_ENDPOINT, {
+  apiKey: import.meta.env.VITE_API_KEY,
+})
 function App() {
   const [count, setCount] = useState(0)
+  const sub = useChannel(client, '/default/*', (data) => console.log(data))
+  console.log(sub)
 
   return (
     <>
