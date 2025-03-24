@@ -7,7 +7,7 @@ import { AppSyncEventsClient, SubscriptionInfo } from './appsync-events-client'
  *
  * @param client - The AppSyncEventsClient instance
  * @param channel - The channel name to subscribe to
- * @param callback - Callback function invoked when events are received
+ * @param callback - Optional callback function invoked when events are received
  * @returns The subscription info object if the subscription is active, otherwise undefined
  */
 export function useChannel<T = any>(
@@ -24,8 +24,8 @@ export function useChannel<T = any>(
   }, [callback])
 
   useEffect(() => {
-    // Skip if no client, channel, or callback
-    if (!client || !channel || !callbackRef.current) {
+    // Skip if no client or channel
+    if (!client || !channel) {
       return
     }
 
@@ -39,7 +39,7 @@ export function useChannel<T = any>(
 
     // Subscribe to the channel
     client
-      .subscribe<T>(channel, handleCallback)
+      .subscribe<T>(channel, callback ? handleCallback : undefined)
       .then((subscription) => {
         if (isMounted) {
           subscriptionRef.current = subscription

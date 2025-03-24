@@ -9,7 +9,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), dts({ include: ['lib'] })],
+  plugins: [
+    react()
+  ],
   build: {
     copyPublicDir: false,
     lib: {
@@ -18,7 +20,7 @@ export default defineConfig({
       fileName: 'main',
     },
     rollupOptions: {
-      external: ['react', 'react/jsx-runtime'],
+      external: ['react', 'react-dom', 'react/jsx-runtime'],
     },
   },
 })
