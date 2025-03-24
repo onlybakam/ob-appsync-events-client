@@ -1,30 +1,78 @@
+/**
+ * AWS AppSync Events WebSocket subprotocol identifier
+ * @internal
+ */
 const AWS_APPSYNC_EVENTS_SUBPROTOCOL = 'aws-appsync-event-ws'
 
-interface ClientOptions {
+/**
+ * Configuration options for AppSyncEventsClient
+ * @public
+ */
+export interface ClientOptions {
+  /** AWS region for the AppSync API */
   region?: string
+
+  /** Authentication mode to use when connecting to AppSync */
   authMode?: 'apiKey' | 'COGNITO_USER_POOLS' | 'OIDC' | 'CUSTOM'
+
+  /** API key for apiKey authentication mode */
   apiKey?: string
+
+  /** Authorization token for COGNITO_USER_POOLS, OIDC, or CUSTOM authentication modes */
   authorization?: string
 }
 
-// export type AppSyncEventType = string | number | boolean | AppSyncEventType[] | Record<string, unknown>
-
+/**
+ * Information about an active subscription
+ * @public
+ a*/
 export type SubscriptionInfo = {
+  /** Unique identifier for the subscription */
   id: string
+
+  /** Function to unsubscribe from the channel */
   unsubscribe: () => void
+
+  publish: (...events: any[]) => void
 }
 
+/**
+ * Internal subscription state tracking
+ * @internal
+ */
 interface Subscription<T> {
+  /** Whether the subscription is connected and ready to receive data */
   ready: boolean
+
+  /** Channel name this subscription is for */
   channel: string
+
+  /** Timestamp when the subscription was created */
   timestamp: number
+
+  /** Subscription info returned to consumers */
   info?: SubscriptionInfo
+
+  /** Callback function to invoke when data is received */
   callback: (data: T) => void
+
+  /** Promise resolution function for subscription setup */
   resolve: (value: SubscriptionInfo) => void
+
+  /** Promise rejection function for subscription setup */
   reject: (reason?: unknown) => unknown
 }
 
+/**
+ * Authentication protocol for AppSync operations
+ * @internal
+ */
 type AuthProtocol = { 'x-api-key': string } | { authorization: string }
+
+/**
+ * Authentication protocol for WebSocket connection
+ * @internal
+ */
 type ConnectAuthProtocol =
   | { 'x-api-key': string; host: string }
   | { authorization: string; host: string }
@@ -121,7 +169,11 @@ interface ProtocolError {
 }
 
 /**
- * Returns a header value for the SubProtocol header
+ * Formats authentication data for the WebSocket subprotocol header
+ *
+ * @internal
+ * @param auth - Authentication data to encode
+ * @returns Formatted header string
  */
 function getAuthProtocol(auth: ConnectAuthProtocol): string {
   const based64UrlHeader = btoa(JSON.stringify(auth))
@@ -131,6 +183,13 @@ function getAuthProtocol(auth: ConnectAuthProtocol): string {
   return `header-${based64UrlHeader}`
 }
 
+/**
+ * Converts an array of protocol errors to a human-readable string
+ *
+ * @internal
+ * @param errors - Array of protocol errors
+ * @returns Error message string
+ */
 function errorsToString(errors: ProtocolError[]) {
   const first = errors[0]
   return first ? `${first.errorType}: ${first.message}` : 'Unknown error'
@@ -139,21 +198,58 @@ function errorsToString(errors: ProtocolError[]) {
 const eventDomainPattern =
   /^(https:\/\/)?\w{26}\.\w+-api\.\w{2}(?:(?:-\w{2,})+)-\d\.amazonaws.com(?:\.cn)?(\/event)?$/i
 
+/**
+ * Determines if a URL is a custom domain rather than a standard AWS endpoint
+ *
+ * @public
+ * @param url - The URL to check
+ * @returns True if the URL is a custom domain
+ */
 export const isCustomDomain = (url: string): boolean => {
   return url.match(eventDomainPattern) === null
 }
+
+/**
+ * Determines if a URL is a standard AWS AppSync endpoint
+ *
+ * @internal
+ * @param url - The URL to check
+ * @returns True if the URL is a standard AWS endpoint
+ */
 const isEventDomain = (url: string): boolean => url.match(eventDomainPattern) !== null
 
+/**
+ * Client for AWS AppSync Events API
+ *
+ * Provides WebSocket-based publish/subscribe capabilities for AppSync event channels
+ * @public
+ */
 export class AppSyncEventsClient {
+  /** Active WebSocket connection */
   private ws: WebSocket | null = null
+
+  /** Map of active subscriptions by subscription ID */
   private subscriptions = new Map<string, Subscription<any>>()
+
+  /** Connection state flag */
   private isConnected = false
+
+  /** Current count of reconnection attempts */
   private reconnectAttempts = 0
+
+  /** Promise for the connection process */
   private connection: Promise<AppSyncEventsClient> | null = null
 
+  /** Maximum number of reconnection attempts before giving up */
   private readonly maxReconnectAttempts = 5
+
+  /** Base reconnection delay in milliseconds (increases with backoff) */
   private readonly reconnectDelay = 1_000
 
+  /**
+   * Converts HTTP endpoint to WebSocket URL
+   * @internal
+   */
   private get realTimeUrl() {
     const protocol = 'wss://'
     const realtimePath = '/event/realtime'
@@ -169,11 +265,23 @@ export class AppSyncEventsClient {
     return protocol.concat(realtimeEndpoint, realtimePath)
   }
 
+  /**
+   * Creates a new AppSyncEventsClient
+   *
+   * @param httpEndpoint - The HTTP endpoint of the AppSync API
+   * @param options - Configuration options for the client
+   */
   constructor(
     private readonly httpEndpoint: string,
     private readonly options: ClientOptions,
   ) {}
 
+  /**
+   * Retrieves the appropriate authentication headers based on the configured auth mode
+   * @internal
+   * @returns Authentication headers object
+   * @throws Error if no valid authentication configuration is found
+   */
   private getAuthHeaders() {
     const authMode = this.options.authMode
     if ((!authMode || authMode === 'apiKey') && this.options.apiKey) {
@@ -188,6 +296,13 @@ export class AppSyncEventsClient {
     throw new Error('Please specify an authorization mode')
   }
 
+  /**
+   * Establishes a WebSocket connection to the AppSync Events API
+   *
+   * If a connection is already in progress, returns the existing promise
+   * @public
+   * @returns Promise that resolves with the client when connected
+   */
   public connect(): Promise<AppSyncEventsClient> {
     if (this.connection) {
       return this.connection
@@ -243,6 +358,10 @@ export class AppSyncEventsClient {
     return this.connection
   }
 
+  /**
+   * Handles reconnection attempts with exponential backoff
+   * @internal
+   */
   private handleReconnect(): void {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++
@@ -257,10 +376,20 @@ export class AppSyncEventsClient {
     }
   }
 
+  /**
+   * Handles general protocol error messages
+   * @internal
+   * @param message - Error message from server
+   */
   private handleError(message: ProtocolMessage.ErrorMessage) {
     console.log('Unexpected error', message)
   }
 
+  /**
+   * Handles subscription error messages
+   * @internal
+   * @param message - Subscribe error message from server
+   */
   private handlerSubscribeError(message: ProtocolMessage.SubscribeErrorMessage) {
     const subscription = this.subscriptions.get(message.id)
     if (!subscription) {
@@ -271,6 +400,11 @@ export class AppSyncEventsClient {
     this.subscriptions.delete(message.id)
   }
 
+  /**
+   * Handles successful subscription confirmations
+   * @internal
+   * @param message - Subscribe success message from server
+   */
   private handleSubscribeSuccess(message: ProtocolMessage.SubscribeSuccessMessage) {
     const subscription = this.subscriptions.get(message.id)
     if (!subscription) {
@@ -281,10 +415,16 @@ export class AppSyncEventsClient {
     subscription.info = {
       id: message.id,
       unsubscribe: () => this.unsubscribe(message.id),
+      publish: (...data) => this.publish(subscription.channel, ...data),
     }
     subscription.resolve(subscription.info)
   }
 
+  /**
+   * Handles incoming data messages and routes them to the appropriate callback
+   * @internal
+   * @param message - Data message from server
+   */
   private handleData(message: ProtocolMessage.DataMessage): void {
     const subscription = this.subscriptions.get(message.id)
     if (!subscription || !subscription.ready) {
@@ -294,37 +434,62 @@ export class AppSyncEventsClient {
     subscription.callback(JSON.parse(message.event))
   }
 
-  public publish(channel: string, data: unknown): void {
+  /**
+   * Publishes data to a specified channel
+   *
+   * @public
+   * @param channel - The channel to publish to
+   * @param data - The data to publish (will be serialized to JSON)
+   * @throws Error if not connected to WebSocket
+   */
+  public publish(channel: string, ...data: any[]): void {
     if (!this.isConnected || !this.ws) {
       throw new Error('WebSocket is not connected')
+    }
+
+    if (channel.endsWith('/*')) {
+      throw new Error(`Cannot publish to channel with '*' in path: ${channel}`)
+    }
+
+    if (data.length === 0 || data.length > 5) {
+      throw new Error('You can publish up to 5 events at a time')
     }
 
     const publishMessage: ProtocolMessage.PublishMessage = {
       id: crypto.randomUUID(),
       type: 'publish',
       channel,
-      events: [JSON.stringify(data)],
+      events: data.map((d) => JSON.stringify(d)),
       authorization: this.getAuthHeaders(),
     }
 
     this.ws.send(JSON.stringify(publishMessage))
   }
 
+  /**
+   * Subscribes to a channel to receive data
+   *
+   * @public
+   * @param channel - The channel to subscribe to
+   * @param callback - Function to call when data is received on this channel
+   * @param subscriptionId - Optional custom subscription ID (generated if not provided)
+   * @returns Promise resolving to subscription info when subscription is confirmed
+   * @throws Error if connection fails or subscription request is rejected
+   */
   public async subscribe<T = any>(
     channel: string,
-    callback: (data: T) => void,
+    callback?: (data: T) => void,
     subscriptionId?: string,
   ) {
     await this.connect()
+    if (!callback) {
+      return Promise.resolve<SubscriptionInfo>({
+        id: '<not-subscribed>',
+        unsubscribe: () => {}, //no-op
+        publish: (...data: any[]) => this.publish(channel, ...data),
+      })
+    }
     return new Promise<SubscriptionInfo>((resolve, reject) => {
-      // const it = this.subscriptions.entries()
-      // const sub = it.find(([id, s]) => {
-      //   return s.channel === channel
-      // })
-      // if (sub) {
-      //   resolve(sub)
-      // }
-
       if (!this.ws) {
         reject(new Error('WebSocket not ready'))
       }
@@ -348,6 +513,12 @@ export class AppSyncEventsClient {
     })
   }
 
+  /**
+   * Unsubscribes from a channel
+   * @internal
+   * @param subscriptionId - The ID of the subscription to remove
+   * @throws Error if not connected to WebSocket
+   */
   private unsubscribe(subscriptionId: string): void {
     if (!this.isConnected || !this.ws) {
       throw new Error('WebSocket is not connected')
@@ -362,6 +533,11 @@ export class AppSyncEventsClient {
     this.subscriptions.delete(subscriptionId)
   }
 
+  /**
+   * Disconnects the WebSocket and clears all subscriptions
+   *
+   * @public
+   */
   public disconnect(): void {
     if (this.ws) {
       this.ws.close()

@@ -63,5 +63,5 @@ export function useChannel<T = any>(
     }
   }, [client, channel]) // Only re-run if client or channel changes
 
-  return subscriptionRef.current
+  return subscriptionRef
 }
