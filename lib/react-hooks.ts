@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppSyncEventsClient, SubscriptionInfo } from './appsync-events-client'
 
 /**
@@ -14,9 +14,10 @@ export function useChannel<T = any>(
   client: AppSyncEventsClient,
   channel: string,
   callback?: (data: T) => void,
-) {
+): [SubscriptionInfo, boolean] {
   const subscriptionRef = useRef<SubscriptionInfo>(undefined)
   const callbackRef = useRef(callback)
+  const [isReady, setIsReady] = useState(false)
 
   // Update callback ref when it changes
   useEffect(() => {
@@ -31,26 +32,37 @@ export function useChannel<T = any>(
 
     let isMounted = true
 
-    const handleCallback = (data: T) => {
-      if (isMounted && callbackRef.current) {
-        callbackRef.current(data)
+    const handle = (subscription: SubscriptionInfo) => {
+      if (isMounted) {
+        subscriptionRef.current = subscription
+        setIsReady(true)
+      } else {
+        subscription.unsubscribe()
+        setIsReady(false)
       }
     }
 
-    // Subscribe to the channel
-    client
-      .subscribe<T>(channel, callback ? handleCallback : undefined)
-      .then((subscription) => {
-        if (isMounted) {
-          subscriptionRef.current = subscription
-        } else {
-          // Component unmounted before subscription completed
-          subscription.unsubscribe()
+    if (!callback) {
+      client
+        .getChannel(channel)
+        .then(handle)
+        .catch((error) => {
+          console.error(`Error getting publishing channel ${channel}:`, error)
+        })
+    } else {
+      const handleCallback = (data: T) => {
+        if (isMounted && callbackRef.current) {
+          callbackRef.current(data)
         }
-      })
-      .catch((error) => {
-        console.error(`Error subscribing to channel ${channel}:`, error)
-      })
+      }
+      // Subscribe to the channel
+      client
+        .subscribe<T>(channel, handleCallback)
+        .then(handle)
+        .catch((error) => {
+          console.error(`Error subscribing to channel ${channel}:`, error)
+        })
+    }
 
     // Cleanup function to unsubscribe when unmounting
     return () => {
@@ -59,9 +71,17 @@ export function useChannel<T = any>(
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe()
         subscriptionRef.current = undefined
+        setIsReady(false)
       }
     }
   }, [client, channel]) // Only re-run if client or channel changes
 
-  return subscriptionRef
+  // wrap ref inside a SubscriptionInfo
+  const x: SubscriptionInfo = {
+    id: subscriptionRef.current?.id ?? 'n/a',
+    publish: (...events: any[]) => subscriptionRef.current?.publish(...events),
+    unsubscribe: () => subscriptionRef.current?.unsubscribe(),
+  }
+
+  return [x, isReady]
 }

@@ -10,9 +10,10 @@ const client = new AppSyncEventsClient(import.meta.env.VITE_HTTP_ENDPOINT, {
 function App() {
   const [count, setCount] = useState(0)
   useChannel(client, '/default/*', (data) => console.log(data))
-  const pub = useChannel(client, '/default/test')
+  const [pub, isReady] = useChannel(client, '/default/test')
+  console.log(isReady)
   function handleclick() {
-    pub.current?.publish("I'm the captain!")
+    pub?.publish("I'm the captain!")
   }
 
   return (

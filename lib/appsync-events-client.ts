@@ -466,6 +466,15 @@ export class AppSyncEventsClient {
     this.ws.send(JSON.stringify(publishMessage))
   }
 
+  public async getChannel(channel: string) {
+    await this.connect()
+    return Promise.resolve<SubscriptionInfo>({
+      id: '<not-subscribed>',
+      unsubscribe: () => {}, //no-op
+      publish: (...data: any[]) => this.publish(channel, ...data),
+    })
+  }
+
   /**
    * Subscribes to a channel to receive data
    *
@@ -478,17 +487,10 @@ export class AppSyncEventsClient {
    */
   public async subscribe<T = any>(
     channel: string,
-    callback?: (data: T) => void,
+    callback: (data: T) => void,
     subscriptionId?: string,
   ) {
     await this.connect()
-    if (!callback) {
-      return Promise.resolve<SubscriptionInfo>({
-        id: '<not-subscribed>',
-        unsubscribe: () => {}, //no-op
-        publish: (...data: any[]) => this.publish(channel, ...data),
-      })
-    }
     return new Promise<SubscriptionInfo>((resolve, reject) => {
       if (!this.ws) {
         reject(new Error('WebSocket not ready'))
