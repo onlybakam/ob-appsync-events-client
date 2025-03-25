@@ -21,6 +21,11 @@
   "peerDependencies": {
     "react": ">=16.8.0"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@aws-amplify/ui-react": "^6.9.4",
     "@eslint/js": "^9.21.0",
