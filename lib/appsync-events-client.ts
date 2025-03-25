@@ -77,6 +77,10 @@ type ConnectAuthProtocol =
   | { 'x-api-key': string; host: string }
   | { authorization: string; host: string }
 
+/**
+ * Union type of all possible protocol messages exchanged with the AppSync WebSocket API
+ * @internal
+ */
 type ProtocolMessage =
   | ProtocolMessage.KaMessage
   | ProtocolMessage.ConnectionInitMessage
@@ -163,8 +167,14 @@ export namespace ProtocolMessage {
   }
 }
 
+/**
+ * Error structure returned by the AppSync protocol
+ * @internal
+ */
 interface ProtocolError {
+  /** Type of error that occurred */
   errorType: string
+  /** Human-readable error message */
   message: string
 }
 
@@ -278,8 +288,9 @@ export class AppSyncEventsClient {
 
   /**
    * Retrieves the appropriate authentication headers based on the configured auth mode
+   *
    * @internal
-   * @returns Authentication headers object
+   * @returns Authentication headers object for API requests
    * @throws Error if no valid authentication configuration is found
    */
   private getAuthHeaders() {
@@ -466,6 +477,13 @@ export class AppSyncEventsClient {
     this.ws.send(JSON.stringify(publishMessage))
   }
 
+  /**
+   * Gets a channel for publishing without subscribing to events
+   *
+   * @public
+   * @param channel - The channel name to publish to
+   * @returns A subscription info object that can be used for publishing only
+   */
   public async getChannel(channel: string) {
     await this.connect()
     return Promise.resolve<SubscriptionInfo>({

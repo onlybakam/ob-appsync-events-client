@@ -8,7 +8,7 @@ import { AppSyncEventsClient, SubscriptionInfo } from './appsync-events-client'
  * @param client - The AppSyncEventsClient instance
  * @param channel - The channel name to subscribe to
  * @param callback - Optional callback function invoked when events are received
- * @returns The subscription info object if the subscription is active, otherwise undefined
+ * @returns A tuple containing [subscription info, isReady flag]
  */
 export function useChannel<T = any>(
   client: AppSyncEventsClient,
@@ -76,12 +76,16 @@ export function useChannel<T = any>(
     }
   }, [client, channel]) // Only re-run if client or channel changes
 
-  // wrap ref inside a SubscriptionInfo
-  const x: SubscriptionInfo = {
+  // Create a stable reference to the subscription that doesn't change on each render
+  /**
+   * Stable subscription reference that persists across renders
+   * @internal
+   */
+  const subscriptionRef2: SubscriptionInfo = {
     id: subscriptionRef.current?.id ?? 'n/a',
     publish: (...events: any[]) => subscriptionRef.current?.publish(...events),
     unsubscribe: () => subscriptionRef.current?.unsubscribe(),
   }
 
-  return [x, isReady]
+  return [subscriptionRef2, isReady]
 }
