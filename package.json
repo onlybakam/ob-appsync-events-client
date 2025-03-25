@@ -1,6 +1,6 @@
 {
   "name": "ob-appsync-events-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A lightweight TypeScript client for AWS AppSync Events API with React hooks support",
   "type": "module",
   "files": [
