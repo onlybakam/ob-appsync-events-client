@@ -6,12 +6,12 @@
   "files": ["dist"],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p && vite build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "main": "./dist/main.js",
-  "types": "./dist/lib/main.d.ts",
+  "types": "./dist/main.d.ts",
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

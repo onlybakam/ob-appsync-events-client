@@ -9,7 +9,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), dts({ rollupTypes: true, tsconfigPath: './tsconfig.app.json' })],
+  plugins: [
+    react(),
+    dts({
+      include: ['lib'],
+      rollupTypes: true,
+      tsconfigPath: './tsconfig.app.json',
+    }),
+  ],
   build: {
     copyPublicDir: false,
     lib: {

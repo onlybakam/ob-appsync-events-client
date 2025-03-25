@@ -2,19 +2,17 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
-// import { AppSyncEventsClient, useChannel } from '../lib/main'
-// import { AppSyncEventsClient } from '../lib/main'
+import { AppSyncEventsClient, useChannel } from '../lib/main'
 
-// const client = new AppSyncEventsClient(import.meta.env.VITE_HTTP_ENDPOINT, {
-//   apiKey: import.meta.env.VITE_API_KEY,
-// })
+const client = new AppSyncEventsClient(import.meta.env.VITE_HTTP_ENDPOINT, {
+  apiKey: import.meta.env.VITE_API_KEY,
+})
 function App() {
   const [count, setCount] = useState(0)
-  // useChannel(client, '/default/*', (data) => console.log(data))
-  // const pub = useChannel(client, '/default/test')
-  //
+  useChannel(client, '/default/*', (data) => console.log(data))
+  const pub = useChannel(client, '/default/test')
   function handleclick() {
-    // pub.current?.publish("I'm the captain!")
+    pub.current?.publish("I'm the captain!")
   }
 
   return (
