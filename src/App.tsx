@@ -3,15 +3,19 @@ import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 import { AppSyncEventsClient, useChannel } from '../lib/main'
+import * as Auth from 'aws-amplify/auth'
 
 const client = new AppSyncEventsClient(import.meta.env.VITE_HTTP_ENDPOINT, {
-  apiKey: import.meta.env.VITE_API_KEY,
+  // apiKey: import.meta.env.VITE_API_KEY,
+  authorization: async () => {
+    const session = await Auth.fetchAuthSession()
+    return session.tokens?.idToken?.toString() ?? 'n/a'
+  },
 })
 function App() {
   const [count, setCount] = useState(0)
   useChannel(client, '/default/*', (data) => console.log(data))
   const [pub, isReady] = useChannel(client, '/default/test')
-  console.log(isReady)
   function handleclick() {
     pub?.publish("I'm the captain!")
   }

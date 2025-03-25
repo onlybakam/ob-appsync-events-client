@@ -12,14 +12,11 @@ export interface ClientOptions {
   /** AWS region for the AppSync API */
   region?: string
 
-  /** Authentication mode to use when connecting to AppSync */
-  authMode?: 'apiKey' | 'COGNITO_USER_POOLS' | 'OIDC' | 'CUSTOM'
-
   /** API key for apiKey authentication mode */
   apiKey?: string
 
-  /** Authorization token for COGNITO_USER_POOLS, OIDC, or CUSTOM authentication modes */
-  authorization?: string
+  /** Authorization token for authentication, either a string token or a function that returns a Promise resolving to a token */
+  authorization?: string | (() => Promise<string>)
 }
 
 /**
@@ -287,22 +284,22 @@ export class AppSyncEventsClient {
   ) {}
 
   /**
-   * Retrieves the appropriate authentication headers based on the configured auth mode
+   * Retrieves the appropriate authentication headers
    *
    * @internal
-   * @returns Authentication headers object for API requests
+   * @returns Promise resolving to authentication headers object for API requests
    * @throws Error if no valid authentication configuration is found
    */
-  private getAuthHeaders() {
-    const authMode = this.options.authMode
-    if ((!authMode || authMode === 'apiKey') && this.options.apiKey) {
+  private async getAuthHeaders() {
+    if (this.options.apiKey) {
       return { 'x-api-key': this.options.apiKey }
     }
-    if (
-      (authMode === 'COGNITO_USER_POOLS' || authMode === 'OIDC' || authMode === 'CUSTOM') &&
-      this.options.authorization
-    ) {
-      return { authorization: this.options.authorization }
+    if (this.options.authorization) {
+      const authorization =
+        typeof this.options.authorization === 'string'
+          ? this.options.authorization
+          : await this.options.authorization()
+      return { authorization: authorization }
     }
     throw new Error('Please specify an authorization mode')
   }
@@ -310,61 +307,64 @@ export class AppSyncEventsClient {
   /**
    * Establishes a WebSocket connection to the AppSync Events API
    *
-   * If a connection is already in progress, returns the existing promise
+   * If a connection is already in progress, returns the existing promise.
+   * Automatically handles token renewal if authorization is provided as a function.
    * @public
    * @returns Promise that resolves with the client when connected
    */
-  public connect(): Promise<AppSyncEventsClient> {
+  public async connect(): Promise<AppSyncEventsClient> {
     if (this.connection) {
       return this.connection
     }
-    this.connection = new Promise((resolve, reject) => {
-      try {
-        const headers = getAuthProtocol({
-          host: this.httpEndpoint.replace('https://', '').replace('/event', ''),
-          ...this.getAuthHeaders(),
-        })
-        this.ws = new WebSocket(this.realTimeUrl, [AWS_APPSYNC_EVENTS_SUBPROTOCOL, headers])
+    this.connection = this.getAuthHeaders().then((header) => {
+      return new Promise((resolve, reject) => {
+        try {
+          const headers = getAuthProtocol({
+            host: this.httpEndpoint.replace('https://', '').replace('/event', ''),
+            ...header,
+          })
+          this.ws = new WebSocket(this.realTimeUrl, [AWS_APPSYNC_EVENTS_SUBPROTOCOL, headers])
 
-        this.ws.onopen = () => {
-          console.log('WebSocket connection established', this.ws?.readyState)
-          if (this.ws?.readyState === WebSocket.OPEN) {
-            this.isConnected = true
-            this.reconnectAttempts = 0
-            resolve(this)
+          this.ws.onopen = () => {
+            // console.log('WebSocket connection established', this.ws?.readyState)
+            if (this.ws?.readyState === WebSocket.OPEN) {
+              this.isConnected = true
+              this.reconnectAttempts = 0
+              resolve(this)
+            }
           }
-        }
 
-        this.ws.onclose = (event) => {
-          console.log('WebSocket connection closed', event.reason)
-          this.isConnected = false
-          this.handleReconnect()
-        }
+          this.ws.onclose = (event) => {
+            console.log('WebSocket connection closed', event.reason)
+            this.isConnected = false
+            this.handleReconnect()
+          }
 
-        this.ws.onerror = (error: Event) => {
-          console.error('WebSocket error:', error)
+          this.ws.onerror = (error: Event) => {
+            console.error('WebSocket error:', error)
+            reject(error)
+          }
+
+          this.ws.onmessage = (event: MessageEvent) => {
+            try {
+              const message = JSON.parse(event.data) as ProtocolMessage
+              if (message.type === 'data') {
+                this.handleData(message)
+              } else if (message.type === 'subscribe_success') {
+                this.handleSubscribeSuccess(message)
+              } else if (message.type === 'subscribe_error') {
+                this.handlerSubscribeError(message)
+              } else if (message.type === 'error') {
+                this.handleError(message)
+              }
+            } catch (error) {
+              console.error('Error handling message:', error)
+            }
+          }
+        } catch (error) {
           reject(error)
         }
-
-        this.ws.onmessage = (event: MessageEvent) => {
-          try {
-            const message = JSON.parse(event.data) as ProtocolMessage
-            if (message.type === 'data') {
-              this.handleData(message)
-            } else if (message.type === 'subscribe_success') {
-              this.handleSubscribeSuccess(message)
-            } else if (message.type === 'subscribe_error') {
-              this.handlerSubscribeError(message)
-            } else if (message.type === 'error') {
-              this.handleError(message)
-            }
-          } catch (error) {
-            console.error('Error handling message:', error)
-          }
-        }
-      } catch (error) {
-        reject(error)
-      }
+      })
     })
     return this.connection
   }
@@ -421,7 +421,7 @@ export class AppSyncEventsClient {
     if (!subscription) {
       return
     }
-    console.log(`subscription ${message.id} ready`)
+    // console.log(`subscription ${message.id} ready`)
     subscription.ready = true
     subscription.info = {
       id: message.id,
@@ -451,9 +451,10 @@ export class AppSyncEventsClient {
    * @public
    * @param channel - The channel to publish to
    * @param data - The data to publish (will be serialized to JSON)
+   * @returns Promise that resolves when the publish operation completes
    * @throws Error if not connected to WebSocket
    */
-  public publish(channel: string, ...data: any[]): void {
+  public async publish(channel: string, ...data: any[]) {
     if (!this.isConnected || !this.ws) {
       throw new Error('WebSocket is not connected')
     }
@@ -471,7 +472,7 @@ export class AppSyncEventsClient {
       type: 'publish',
       channel,
       events: data.map((d) => JSON.stringify(d)),
-      authorization: this.getAuthHeaders(),
+      authorization: await this.getAuthHeaders(),
     }
 
     this.ws.send(JSON.stringify(publishMessage))
@@ -496,6 +497,7 @@ export class AppSyncEventsClient {
   /**
    * Subscribes to a channel to receive data
    *
+   * Automatically handles authentication token retrieval or renewal.
    * @public
    * @param channel - The channel to subscribe to
    * @param callback - Function to call when data is received on this channel
@@ -509,6 +511,7 @@ export class AppSyncEventsClient {
     subscriptionId?: string,
   ) {
     await this.connect()
+    const authorization = await this.getAuthHeaders()
     return new Promise<SubscriptionInfo>((resolve, reject) => {
       if (!this.ws) {
         reject(new Error('WebSocket not ready'))
@@ -527,7 +530,7 @@ export class AppSyncEventsClient {
         type: 'subscribe',
         id,
         channel,
-        authorization: this.getAuthHeaders(),
+        authorization,
       }
       this.ws?.send(JSON.stringify(subscribeMessage))
     })
