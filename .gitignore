@@ -7,10 +7,22 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
+
+# Demo/example app (not needed for the library)
+src
+public
+index.html
+
+# Local files
 *.local
+.env.local
+config.json
 
 # Editor directories and files
 .vscode/*
@@ -23,5 +35,3 @@ dist-ssr
 *.sln
 *.sw?
 CLAUDE.md
-.env.local
-config.json

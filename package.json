@@ -1,7 +1,7 @@
 {
   "name": "ob-appsync-events-client",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A lightweight TypeScript client for AWS AppSync Events API with React hooks support",
   "type": "module",
   "files": [
     "dist"
@@ -10,20 +10,25 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "format": "npx @biomejs/biome format . --write",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build"
   },
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "dependencies": {
-    "@aws-amplify/ui-react": "^6.9.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0"
   },
   "devDependencies": {
+    "@aws-amplify/ui-react": "^6.9.4",
     "@eslint/js": "^9.21.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
@@ -32,5 +37,15 @@
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0",
     "vite-plugin-dts": "^4.5.3"
-  }
+  },
+  "keywords": [
+    "aws",
+    "appsync",
+    "events",
+    "websocket",
+    "realtime",
+    "react",
+    "hooks"
+  ],
+  "license": "MIT"
 }
