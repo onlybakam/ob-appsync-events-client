@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { AppSyncEventsClient, SubscriptionInfo } from './appsync-events-client'
+import { AppSyncEventsClient, Channel } from './appsync-events-client'
 
 /**
  * React hook for subscribing to an AppSync Events channel.
  * Automatically handles subscription management and cleanup.
  *
  * @param client - The AppSyncEventsClient instance
- * @param channel - The channel name to subscribe to
+ * @param path - The channel path to subscribe to
  * @param callback - Optional callback function invoked when events are received
- * @returns A tuple containing [subscription info, isReady flag]
+ * @returns A tuple containing [channel, isReady flag]
  */
 export function useChannel<T = any>(
   client: AppSyncEventsClient,
-  channel: string,
+  path: string,
   callback?: (data: T) => void,
-): [SubscriptionInfo, boolean] {
-  const subscriptionRef = useRef<SubscriptionInfo>(undefined)
+): [Channel, boolean] {
+  const channelRef = useRef<Channel>(undefined)
   const callbackRef = useRef(callback)
   const [isReady, setIsReady] = useState(false)
 
@@ -26,28 +26,28 @@ export function useChannel<T = any>(
 
   useEffect(() => {
     // Skip if no client or channel
-    if (!client || !channel) {
+    if (!client || !path) {
       return
     }
 
     let isMounted = true
 
-    const handle = (subscription: SubscriptionInfo) => {
+    const handle = (channel: Channel) => {
       if (isMounted) {
-        subscriptionRef.current = subscription
+        channelRef.current = channel
         setIsReady(true)
       } else {
-        subscription.unsubscribe()
+        channel.unsubscribe()
         setIsReady(false)
       }
     }
 
     if (!callback) {
       client
-        .getChannel(channel)
+        .getChannel(path)
         .then(handle)
         .catch((error) => {
-          console.error(`Error getting publishing channel ${channel}:`, error)
+          console.error(`Error getting publishing channel ${path}:`, error)
         })
     } else {
       const handleCallback = (data: T) => {
@@ -57,10 +57,10 @@ export function useChannel<T = any>(
       }
       // Subscribe to the channel
       client
-        .subscribe<T>(channel, handleCallback)
+        .subscribe<T>(path, handleCallback)
         .then(handle)
         .catch((error) => {
-          console.error(`Error subscribing to channel ${channel}:`, error)
+          console.error(`Error subscribing to channel ${path}:`, error)
         })
     }
 
@@ -68,24 +68,24 @@ export function useChannel<T = any>(
     return () => {
       isMounted = false
 
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe()
-        subscriptionRef.current = undefined
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+        channelRef.current = undefined
         setIsReady(false)
       }
     }
-  }, [client, channel]) // Only re-run if client or channel changes
+  }, [client, path]) // Only re-run if client or channel changes
 
   // Create a stable reference to the subscription that doesn't change on each render
   /**
    * Stable subscription reference that persists across renders
    * @internal
    */
-  const subscriptionRef2: SubscriptionInfo = {
-    id: subscriptionRef.current?.id ?? 'n/a',
-    publish: (...events: any[]) => subscriptionRef.current?.publish(...events),
-    unsubscribe: () => subscriptionRef.current?.unsubscribe(),
+  const channel: Channel = {
+    id: channelRef.current?.id ?? 'n/a',
+    publish: (...events: any[]) => channelRef.current?.publish(...events),
+    unsubscribe: () => channelRef.current?.unsubscribe(),
   }
 
-  return [subscriptionRef2, isReady]
+  return [channel, isReady]
 }

@@ -3,12 +3,10 @@
   "version": "0.1.1",
   "description": "A lightweight TypeScript client for AWS AppSync Events API with React hooks support",
   "type": "module",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b ./tsconfig.lib.json && vite build",
     "lint": "eslint .",
     "format": "npx @biomejs/biome format . --write",
     "preview": "vite preview",
@@ -16,8 +14,7 @@
   },
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
-  "dependencies": {
-  },
+  "dependencies": {},
   "peerDependencies": {
     "react": ">=16.8.0"
   },
@@ -43,14 +40,6 @@
     "vite": "^6.2.0",
     "vite-plugin-dts": "^4.5.3"
   },
-  "keywords": [
-    "aws",
-    "appsync",
-    "events",
-    "websocket",
-    "realtime",
-    "react",
-    "hooks"
-  ],
+  "keywords": ["aws", "appsync", "events", "websocket", "realtime", "react", "hooks"],
   "license": "MIT"
 }

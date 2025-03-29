@@ -17,19 +17,22 @@ export interface ClientOptions {
 
   /** Authorization token for authentication, either a string token or a function that returns a Promise resolving to a token */
   authorization?: string | (() => Promise<string>)
+
+  debug?: boolean
 }
 
 /**
  * Information about an active subscription
  * @public
  a*/
-export type SubscriptionInfo = {
+export type Channel = {
   /** Unique identifier for the subscription */
   id: string
 
   /** Function to unsubscribe from the channel */
   unsubscribe: () => void
 
+  /** Function to publish directly to the channel */
   publish: (...events: any[]) => void
 }
 
@@ -41,20 +44,20 @@ interface Subscription<T> {
   /** Whether the subscription is connected and ready to receive data */
   ready: boolean
 
-  /** Channel name this subscription is for */
-  channel: string
+  /** Channel path this subscription is for */
+  path: string
 
   /** Timestamp when the subscription was created */
   timestamp: number
 
-  /** Subscription info returned to consumers */
-  info?: SubscriptionInfo
+  /** Subscription channel returned to consumers */
+  channel?: Channel
 
   /** Callback function to invoke when data is received */
   callback: (data: T) => void
 
   /** Promise resolution function for subscription setup */
-  resolve: (value: SubscriptionInfo) => void
+  resolve: (value: Channel) => void
 
   /** Promise rejection function for subscription setup */
   reject: (reason?: unknown) => unknown
@@ -299,9 +302,15 @@ export class AppSyncEventsClient {
         typeof this.options.authorization === 'string'
           ? this.options.authorization
           : await this.options.authorization()
-      return { authorization: authorization }
+      return { authorization }
     }
     throw new Error('Please specify an authorization mode')
+  }
+
+  private debug(message?: any, ...optionalParams: any[]) {
+    if (this.options.debug) {
+      console.log('AppSyncEventsClient:', message, ...optionalParams)
+    }
   }
 
   /**
@@ -326,7 +335,7 @@ export class AppSyncEventsClient {
           this.ws = new WebSocket(this.realTimeUrl, [AWS_APPSYNC_EVENTS_SUBPROTOCOL, headers])
 
           this.ws.onopen = () => {
-            // console.log('WebSocket connection established', this.ws?.readyState)
+            this.debug('WebSocket connection established', this.ws?.readyState)
             if (this.ws?.readyState === WebSocket.OPEN) {
               this.isConnected = true
               this.reconnectAttempts = 0
@@ -335,7 +344,7 @@ export class AppSyncEventsClient {
           }
 
           this.ws.onclose = (event) => {
-            console.log('WebSocket connection closed', event.reason)
+            this.debug('WebSocket connection closed', event.reason)
             this.isConnected = false
             this.handleReconnect()
           }
@@ -377,7 +386,7 @@ export class AppSyncEventsClient {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++
       const delay = this.reconnectDelay * 2 ** (this.reconnectAttempts - 1)
-      console.log(`Attempting to reconnect in ${delay}ms...`)
+      this.debug(`Attempting to reconnect in ${delay}ms...`)
 
       setTimeout(() => {
         this.connect().catch((error) => console.error('Reconnection failed:', error))
@@ -393,7 +402,7 @@ export class AppSyncEventsClient {
    * @param message - Error message from server
    */
   private handleError(message: ProtocolMessage.ErrorMessage) {
-    console.log('Unexpected error', message)
+    this.debug('Unexpected error', message)
   }
 
   /**
@@ -406,7 +415,7 @@ export class AppSyncEventsClient {
     if (!subscription) {
       return
     }
-    console.log(`Error subscribing to channel ${subscription.channel}`)
+    this.debug(`Error subscribing to channel ${subscription.path}`)
     subscription.reject(new Error(errorsToString(message.errors ?? [])))
     this.subscriptions.delete(message.id)
   }
@@ -421,14 +430,14 @@ export class AppSyncEventsClient {
     if (!subscription) {
       return
     }
-    // console.log(`subscription ${message.id} ready`)
+    this.debug(`subscription ${message.id} ready`)
     subscription.ready = true
-    subscription.info = {
+    subscription.channel = {
       id: message.id,
       unsubscribe: () => this.unsubscribe(message.id),
-      publish: (...data) => this.publish(subscription.channel, ...data),
+      publish: (...data) => this.publish(subscription.path, ...data),
     }
-    subscription.resolve(subscription.info)
+    subscription.resolve(subscription.channel)
   }
 
   /**
@@ -439,9 +448,10 @@ export class AppSyncEventsClient {
   private handleData(message: ProtocolMessage.DataMessage): void {
     const subscription = this.subscriptions.get(message.id)
     if (!subscription || !subscription.ready) {
-      console.error('Subscription not ready')
+      console.error(`Subscription not ready: ${message.id}`)
       return
     }
+    this.debug(`Received data on subscription ${message.id}:`, message.event)
     subscription.callback(JSON.parse(message.event))
   }
 
@@ -482,44 +492,44 @@ export class AppSyncEventsClient {
    * Gets a channel for publishing without subscribing to events
    *
    * @public
-   * @param channel - The channel name to publish to
+   * @param path - The channel path to publish to
    * @returns A subscription info object that can be used for publishing only
    */
-  public async getChannel(channel: string) {
+  public async getChannel(path: string) {
     await this.connect()
-    return Promise.resolve<SubscriptionInfo>({
+    return {
       id: '<not-subscribed>',
       unsubscribe: () => {}, //no-op
-      publish: (...data: any[]) => this.publish(channel, ...data),
-    })
+      publish: (...data: any[]) => this.publish(path, ...data),
+    } as Channel
   }
 
   /**
-   * Subscribes to a channel to receive data
+   * Subscribes to a channel path to receive data
    *
    * Automatically handles authentication token retrieval or renewal.
    * @public
-   * @param channel - The channel to subscribe to
+   * @param path - The channel path to subscribe to
    * @param callback - Function to call when data is received on this channel
    * @param subscriptionId - Optional custom subscription ID (generated if not provided)
-   * @returns Promise resolving to subscription info when subscription is confirmed
+   * @returns Promise resolving to Channel when subscription is confirmed
    * @throws Error if connection fails or subscription request is rejected
    */
   public async subscribe<T = any>(
-    channel: string,
+    path: string,
     callback: (data: T) => void,
     subscriptionId?: string,
   ) {
     await this.connect()
     const authorization = await this.getAuthHeaders()
-    return new Promise<SubscriptionInfo>((resolve, reject) => {
+    return new Promise<Channel>((resolve, reject) => {
       if (!this.ws) {
         reject(new Error('WebSocket not ready'))
       }
 
       const id = subscriptionId ?? crypto.randomUUID()
       this.subscriptions.set(id, {
-        channel,
+        path,
         timestamp: Date.now(),
         ready: false,
         callback,
@@ -529,7 +539,7 @@ export class AppSyncEventsClient {
       const subscribeMessage: ProtocolMessage.SubscribeMessage = {
         type: 'subscribe',
         id,
-        channel,
+        channel: path,
         authorization,
       }
       this.ws?.send(JSON.stringify(subscribeMessage))
