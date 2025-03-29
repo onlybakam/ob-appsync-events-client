@@ -205,19 +205,20 @@ function errorsToString(errors: ProtocolError[]) {
   return first ? `${first.errorType}: ${first.message}` : 'Unknown error'
 }
 
+/** event domain HTTP endpoint patttern */
 const eventDomainPattern =
   /^(https:\/\/)?\w{26}\.\w+-api\.\w{2}(?:(?:-\w{2,})+)-\d\.amazonaws.com(?:\.cn)?(\/event)?$/i
 
-/**
- * Determines if a URL is a custom domain rather than a standard AWS endpoint
- *
- * @public
- * @param url - The URL to check
- * @returns True if the URL is a custom domain
- */
-export const isCustomDomain = (url: string): boolean => {
-  return url.match(eventDomainPattern) === null
-}
+///**
+// * Determines if a URL is a custom domain rather than a standard AWS endpoint
+// *
+// * @public
+// * @param url - The URL to check
+// * @returns True if the URL is a custom domain
+// */
+//const isCustomDomain = (url: string): boolean => {
+//  return url.match(eventDomainPattern) === null
+//}
 
 /**
  * Determines if a URL is a standard AWS AppSync endpoint
@@ -270,7 +271,7 @@ export class AppSyncEventsClient {
         .replace('ddpg-api', 'grt-gamma')
         .replace('appsync-api', 'appsync-realtime-api')
     }
-    realtimeEndpoint = realtimeEndpoint.replace('https://', '').replace('http://', '')
+    // realtimeEndpoint = realtimeEndpoint.replace('https://', '').replace('http://', '')
 
     return protocol.concat(realtimeEndpoint, realtimePath)
   }
@@ -329,7 +330,7 @@ export class AppSyncEventsClient {
       return new Promise((resolve, reject) => {
         try {
           const headers = getAuthProtocol({
-            host: this.httpEndpoint.replace('https://', '').replace('/event', ''),
+            host: this.httpEndpoint,
             ...header,
           })
           this.ws = new WebSocket(this.realTimeUrl, [AWS_APPSYNC_EVENTS_SUBPROTOCOL, headers])
