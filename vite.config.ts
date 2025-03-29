@@ -28,5 +28,11 @@ export default defineConfig({
       external: ['react', 'react-dom', 'react/jsx-runtime'],
     },
   },
-  test: {},
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['tests/**/*.{test,spec}.{js,ts,tsx}'],
+    setupFiles: ['./tests/setup.ts'],
+    testTimeout: 10000
+  },
 })
