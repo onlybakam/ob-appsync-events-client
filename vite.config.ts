@@ -29,10 +29,11 @@ export default defineConfig({
     },
   },
   test: {
+    // onConsoleLog: () => true,
     globals: true,
     environment: 'jsdom',
     include: ['tests/**/*.{test,spec}.{js,ts,tsx}'],
     setupFiles: ['./tests/setup.ts'],
-    testTimeout: 10000
+    testTimeout: 10000,
   },
 })

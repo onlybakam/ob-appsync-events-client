@@ -1,8 +1,5 @@
-/**
- * AWS AppSync Events WebSocket subprotocol identifier
- * @internal
- */
-const AWS_APPSYNC_EVENTS_SUBPROTOCOL = 'aws-appsync-event-ws'
+/** AWS AppSync Events WebSocket subprotocol identifier */
+export const AWS_APPSYNC_EVENTS_SUBPROTOCOL = 'aws-appsync-event-ws'
 
 /**
  * Configuration options for AppSyncEventsClient
@@ -245,6 +242,14 @@ export class AppSyncEventsClient {
   /** Connection state flag */
   private isConnected = false
 
+  public get connected() {
+    return this.isConnected
+  }
+
+  public get status() {
+    return this.ws?.readyState ?? -1
+  }
+
   /** Current count of reconnection attempts */
   private reconnectAttempts = 0
 
@@ -272,7 +277,6 @@ export class AppSyncEventsClient {
         .replace('appsync-api', 'appsync-realtime-api')
     }
     // realtimeEndpoint = realtimeEndpoint.replace('https://', '').replace('http://', '')
-
     return protocol.concat(realtimeEndpoint, realtimePath)
   }
 
@@ -330,7 +334,7 @@ export class AppSyncEventsClient {
       return new Promise((resolve, reject) => {
         try {
           const headers = getAuthProtocol({
-            host: this.httpEndpoint,
+            host: new URL(`https://${this.httpEndpoint}/event`).hostname,
             ...header,
           })
           this.ws = new WebSocket(this.realTimeUrl, [AWS_APPSYNC_EVENTS_SUBPROTOCOL, headers])
