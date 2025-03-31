@@ -23,6 +23,7 @@ index.html
 *.local
 .env.local
 config.json
+coverage
 
 # Editor directories and files
 .vscode/*
