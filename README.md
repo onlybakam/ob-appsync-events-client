@@ -2,6 +2,8 @@
 
 A lightweight TypeScript client for AWS AppSync Events API with React hooks support.
 
+> **Note:** This library is currently in alpha stage. APIs and interfaces may change in future releases.
+
 [![NPM Version](https://img.shields.io/npm/v/ob-appsync-events-client)](https://www.npmjs.com/package/ob-appsync-events-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
@@ -36,7 +38,7 @@ import { AppSyncEventsClient } from "ob-appsync-events-client";
 
 // Initialize the client
 const client = new AppSyncEventsClient(
-  "https://your-appsync-endpoint.appsync-api.region.amazonaws.com/event",
+  "your-appsync-endpoint.appsync-api.region.amazonaws.com",
   {
     apiKey: "your-api-key", // For API Key auth mode
     // OR
@@ -72,7 +74,7 @@ import { AppSyncEventsClient } from "ob-appsync-events-client";
 
 // Create client instance (best done outside component or in a context)
 const client = new AppSyncEventsClient(
-  "https://your-appsync-endpoint.appsync-api.region.amazonaws.com/event",
+  "your-appsync-endpoint.appsync-api.region.amazonaws.com",
   {
     apiKey: "your-api-key",
   },
@@ -117,13 +119,14 @@ The main client for interacting with AWS AppSync Events API.
 constructor(httpEndpoint: string, options: ClientOptions)
 ```
 
-- `httpEndpoint`: The HTTP endpoint of your AppSync API
+- `httpEndpoint`: The domain name of your AppSync API (without protocol or /event path)
 - `options`: Configuration options
   - `region?`: AWS region (optional)
   - `apiKey?`: API key for apiKey authentication mode
   - `authorization?`: Authorization token or token provider function
     - `string`: Static token for authentication
     - `() => Promise<string>`: Function that returns a Promise resolving to a token
+  - `debug?`: Enable debug logging
 
 #### Methods
 
@@ -213,6 +216,9 @@ npm install
 ### Scripts
 
 ```bash
+# Start development server
+npm run dev
+
 # Build the library
 npm run build
 
@@ -221,6 +227,12 @@ npm run format
 
 # Run linting
 npm run lint
+
+# Lint and format with Biome
+npx @biomejs/biome check --apply .
+
+# Preview library in test app
+npm run preview
 ```
 
 ### Project Structure
@@ -231,6 +243,10 @@ ob-appsync-events-client/
 │   ├── appsync-events-client.ts  # Main client implementation
 │   ├── react-hooks.ts    # React hooks for the client
 │   └── main.ts           # Public exports
+├── tests/                # Test files
+│   ├── appsync-events-client.test.ts
+│   ├── react-hooks.test.tsx
+│   └── setup.ts
 ├── dist/                 # Built library output (generated)
 └── package.json          # Package configuration
 ```
