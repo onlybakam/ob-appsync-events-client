@@ -30,8 +30,12 @@ describe('AppSyncEventsClient', () => {
   beforeEach(() => {
     // Silence console.error for tests
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    server = new WS('wss://localhost:1234/event/realtime', {
+      selectProtocol,
+      jsonProtocol: true,
+    })
   })
-  
+
   afterEach(() => {
     WS.clean()
     vi.restoreAllMocks()
@@ -46,9 +50,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should connect successfully with API key auth', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
     server.on('connection', (socket) => {
       const protocol = socket.protocol
       expect(protocol).toMatch(/^header/)
@@ -69,10 +70,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should connect successfully with token auth', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
-
     server.on('connection', (socket) => {
       const protocol = socket.protocol
       expect(protocol).toMatch(/^header/)
@@ -93,10 +90,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should connect successfully with token auth function', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
-
     server.on('connection', (socket) => {
       const protocol = socket.protocol
       expect(protocol).toMatch(/^header/)
@@ -122,26 +115,19 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should use caching for connection requests', async () => {
-    // This test fails because we're spying on the WebSocket constructor too late
-    // Let's simplify and just test the caching behavior differently
-    
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
-    
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Spy on the connect method to ensure it only creates one Promise
     const connectSpy = vi.spyOn(client as any, 'getAuthHeaders')
-    
+
     // First connection
     await client.connect()
-    
+
     // Second connection should reuse the existing connection
     await client.connect()
-    
+
     // getAuthHeaders should only be called once for the initial connection
     expect(connectSpy).toHaveBeenCalledTimes(1)
   })
@@ -150,28 +136,28 @@ describe('AppSyncEventsClient', () => {
     // Setup a client with an AWS domain and check the realtime URL
     const client = new AppSyncEventsClient(
       'abcdefghijklmnopqrstuvwxyz.appsync-api.us-east-1.amazonaws.com',
-      { apiKey: 'test-key' }
+      { apiKey: 'test-key' },
     )
-    
+
     // Access private realTimeUrl getter
     const realTimeUrl = (client as any).realTimeUrl
-    
+
     // Verify transformation
-    expect(realTimeUrl).toContain('appsync-realtime-api')
-    expect(realTimeUrl).toContain('wss://')
-    expect(realTimeUrl).toContain('/event/realtime')
+    expect(realTimeUrl).toBe(
+      'wss://abcdefghijklmnopqrstuvwxyz.appsync-realtime-api.us-east-1.amazonaws.com/event/realtime',
+    )
   })
 
   it('should correctly transform AWS DDPG domain URLs', async () => {
     // Setup a client with a DDPG domain and check the realtime URL
     const client = new AppSyncEventsClient(
       'abcdefghijklmnopqrstuvwxyz.ddpg-api.us-east-1.amazonaws.com',
-      { apiKey: 'test-key' }
+      { apiKey: 'test-key' },
     )
-    
+
     // Access private realTimeUrl getter
     const realTimeUrl = (client as any).realTimeUrl
-    
+
     // Verify transformation
     expect(realTimeUrl).toContain('grt-gamma')
     expect(realTimeUrl).toContain('wss://')
@@ -179,10 +165,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('Receives data messages after subscribing', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -211,10 +193,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('Can connect during subscribe action', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -232,10 +210,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should handle subscription errors', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -254,10 +228,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should handle subscription errors with no error details', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -276,50 +246,41 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should handle general protocol errors', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
       debug: true, // Enable debug for this test
     })
-    
+
     const debugSpy = vi.spyOn(console, 'log')
-    
+
     await client.connect()
-    
+
     server.send({
       type: 'error',
       errors: [{ errorType: 'ServiceError', message: 'Internal server error' }],
     } as ProtocolMessage.ErrorMessage)
-    
+
     // Verify debug was called with error info
     expect(debugSpy).toHaveBeenCalledWith(
       'AppSyncEventsClient:',
       'Unexpected error',
-      expect.objectContaining({ type: 'error' })
+      expect.objectContaining({ type: 'error' }),
     )
   })
 
   it('should handle WebSocket connection errors', async () => {
-    // Create a server but don't start it (to simulate connection failure)
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
-    
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Mock the WebSocket to trigger an error
     const mockWebSocket = {
       close: vi.fn(),
       send: vi.fn(),
       addEventListener: vi.fn(),
       readyState: WebSocket.CONNECTING,
-    };
-    
+    }
+
     // Force WebSocket to error
     vi.spyOn(global, 'WebSocket').mockImplementationOnce(() => {
       setTimeout(() => {
@@ -328,63 +289,47 @@ describe('AppSyncEventsClient', () => {
       }, 0)
       return mockWebSocket as any
     })
-    
+
     // This should now reject because of the error
     await expect(client.connect()).rejects.toBeDefined()
   })
 
   it('should handle WebSocket disconnection and attempt reconnect', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
-    
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
       debug: true,
     })
-    
+
     // Create a spy on setTimeout for reconnection
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
-    const debugSpy = vi.spyOn(console, 'log')
-    
+
     await client.connect()
-    
+
     // Now close the connection to trigger reconnection
     server.close()
-    
+
+    expect((client as any).reconnectAttempts).toBe(1)
     // Verify setTimeout was called for reconnection
     expect(setTimeoutSpy).toHaveBeenCalled()
-    expect(debugSpy).toHaveBeenCalledWith(
-      'AppSyncEventsClient:',
-      'Attempting to reconnect in 1000ms...',
-    )
   })
 
   it('should handle message parsing errors', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     const errorSpy = vi.spyOn(console, 'error')
-    
+
     await client.connect()
-    
+
     // Send an invalid JSON message to trigger parsing error
     // @ts-ignore: direct access to private property for testing
     client.ws.onmessage({ data: '{invalid json' })
-    
-    expect(errorSpy).toHaveBeenCalledWith('Error handling message:', expect.any(Error))
+
+    expect(errorSpy).toHaveBeenCalledWith('Unexpected message:', expect.any(Error))
   })
 
   it('does not trigger callbacks after unsubscribe', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -420,56 +365,37 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should handle data events for unknown subscriptions', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     await client.connect()
-    
+
     const errorSpy = vi.spyOn(console, 'error')
-    
+
     // Send data for non-existent subscription
     server.send({
       id: 'unknown-subscription-id',
       type: 'data',
       event: JSON.stringify({ test: 'data' }),
     } as ProtocolMessage.DataMessage)
-    
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Subscription not ready: unknown-subscription-id'
-    )
+
+    expect(errorSpy).toHaveBeenCalledWith('Subscription not ready: unknown-subscription-id')
   })
 
   it('should publish to a channel', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
     // Connect first
     await client.connect()
 
-    // Create a spy on the WebSocket's send method
-    const sendSpy = vi.spyOn((client as any).ws, 'send')
-
     // Publish to a channel
     const testData = { message: 'Hello, world!' }
     await client.publish('test/channel', testData)
 
-    // Verify the send method was called
-    expect(sendSpy).toHaveBeenCalled()
+    const messageData = (await server.nextMessage) as ProtocolMessage.PublishMessage
 
-    // Verify the message contains the right data and type
-    const lastCallData = sendSpy.mock.lastCall?.[0]
-    expect(lastCallData).toBeDefined()
-
-    const messageData = JSON.parse(lastCallData as string)
     expect(messageData.type).toBe('publish')
     expect(messageData.channel).toBe('test/channel')
     expect(messageData.events.length).toBe(1)
@@ -477,75 +403,56 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should publish multiple events in a single call', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
     await client.connect()
-    
-    const sendSpy = vi.spyOn((client as any).ws, 'send')
-    
+
     const event1 = { type: 'create', id: '123' }
     const event2 = { type: 'update', id: '456' }
     const event3 = { type: 'delete', id: '789' }
-    
+
     await client.publish('test/channel', event1, event2, event3)
-    
-    const lastCallData = sendSpy.mock.lastCall?.[0]
-    const messageData = JSON.parse(lastCallData as string)
-    
-    expect(messageData.events.length).toBe(3)
-    expect(JSON.parse(messageData.events[0])).toEqual(event1)
-    expect(JSON.parse(messageData.events[1])).toEqual(event2)
-    expect(JSON.parse(messageData.events[2])).toEqual(event3)
+
+    const msg = (await server.nextMessage) as ProtocolMessage.PublishMessage
+
+    expect(msg.events.length).toBe(3)
+    expect(JSON.parse(msg.events[0])).toEqual(event1)
+    expect(JSON.parse(msg.events[1])).toEqual(event2)
+    expect(JSON.parse(msg.events[2])).toEqual(event3)
   })
 
   it('should throw error when publishing to wildcard channel', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
     await client.connect()
-    
+
     await expect(client.publish('/test/*', { data: 'test' })).rejects.toThrow(
-      "Cannot publish to channel with '*' in path: /test/*"
+      "Cannot publish to channel with '*' in path: /test/*",
     )
   })
 
   it('should throw error when publishing with no events', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
     await client.connect()
-    
+
     // @ts-ignore: intentionally passing no events for testing
     await expect(client.publish('/test')).rejects.toThrow(
-      'You can publish up to 5 events at a time'
+      'You can publish up to 5 events at a time',
     )
   })
 
   it('should throw error when publishing with too many events', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
     await client.connect()
-    
+
     await expect(client.publish('/test', 1, 2, 3, 4, 5, 6)).rejects.toThrow(
-      'You can publish up to 5 events at a time'
+      'You can publish up to 5 events at a time',
     )
   })
 
@@ -553,9 +460,9 @@ describe('AppSyncEventsClient', () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     await expect(client.publish('/test', { data: 'test' })).rejects.toThrow(
-      'WebSocket is not connected'
+      'WebSocket is not connected',
     )
   })
 
@@ -563,10 +470,10 @@ describe('AppSyncEventsClient', () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Mock connect to fail
     vi.spyOn(client, 'connect').mockRejectedValue(new Error('Connection failed'))
-    
+
     await expect(client.subscribe('/test', () => {})).rejects.toThrow('Connection failed')
   })
 
@@ -574,21 +481,17 @@ describe('AppSyncEventsClient', () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Mock connect to succeed but set WebSocket to null
     vi.spyOn(client, 'connect').mockResolvedValue(client)
-    
+
     // @ts-ignore - Setting private property for test
     client.ws = null
-    
+
     await expect(client.subscribe('/test', () => {})).rejects.toThrow('WebSocket not ready')
   })
 
   it('should return a publish only channel', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -620,10 +523,6 @@ describe('AppSyncEventsClient', () => {
   })
 
   it('should unsubscribe from a channel', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -660,38 +559,31 @@ describe('AppSyncEventsClient', () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // @ts-ignore - Accessing private method for testing
     expect(() => client.unsubscribe('test-id')).toThrow('WebSocket is not connected')
   })
 
   it('should provide connection status through properties', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Initial state
     expect(client.connected).toBe(false)
     expect(client.status).toBe(-1)
-    
+
     // After connection
     await client.connect()
     expect(client.connected).toBe(true)
     expect(client.status).toBe(WebSocket.OPEN)
-    
+
     // After disconnection
     client.disconnect()
     expect(client.connected).toBe(false)
   })
 
   it('should disconnect correctly', async () => {
-    server = new WS('wss://localhost:1234/event/realtime', {
-      selectProtocol,
-      jsonProtocol: true,
-    })
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
@@ -720,7 +612,7 @@ describe('AppSyncEventsClient', () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
-    
+
     // Should not throw an error
     expect(() => client.disconnect()).not.toThrow()
   })

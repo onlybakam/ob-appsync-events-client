@@ -29,7 +29,6 @@ export default defineConfig({
     },
   },
   test: {
-    // onConsoleLog: () => true,
     globals: true,
     environment: 'jsdom',
     include: ['tests/**/*.{test,spec}.{js,ts,tsx}'],

@@ -372,7 +372,7 @@ export class AppSyncEventsClient {
                 this.handleError(message)
               }
             } catch (error) {
-              console.error('Error handling message:', error)
+              console.error('Unexpected message:', error)
             }
           }
         } catch (error) {
