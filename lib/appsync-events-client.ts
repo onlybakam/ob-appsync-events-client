@@ -21,7 +21,7 @@ export interface ClientOptions {
 /**
  * Information about an active subscription
  * @public
- a*/
+ */
 export type Channel = {
   /** Unique identifier for the subscription */
   id: string
@@ -177,15 +177,24 @@ interface ProtocolError {
   message: string
 }
 
+/**
+ * Status of a published message through the AppSync Events API
+ * @public
+ */
 export type MessageStatus = 'PENDING' | 'SUCCESS' | 'ERROR'
+
+/**
+ * Callback function type for handling message publish status updates
+ * @public
+ */
 export type MessageCallback = (status: MessageStatus) => void
 
 /**
- * Formats authentication data for the WebSocket subprotocol header
+ * Encodes auth data as a base64url string for use in WebSocket protocol headers.
  *
  * @internal
  * @param auth - Authentication data to encode
- * @returns Formatted header string
+ * @returns Formatted header string in the format 'header-{base64url-encoded-json}'
  */
 function getAuthProtocol(auth: ConnectAuthProtocol): string {
   const based64UrlHeader = btoa(JSON.stringify(auth))
@@ -207,20 +216,12 @@ function errorsToString(errors: ProtocolError[]) {
   return first ? `${first.errorType}: ${first.message}` : 'Unknown error'
 }
 
-/** event domain HTTP endpoint patttern */
+/**
+ * Regular expression pattern to identify standard AWS AppSync event domain endpoints
+ * @internal
+ */
 const eventDomainPattern =
   /^(https:\/\/)?\w{26}\.\w+-api\.\w{2}(?:(?:-\w{2,})+)-\d\.amazonaws.com(?:\.cn)?(\/event)?$/i
-
-///**
-// * Determines if a URL is a custom domain rather than a standard AWS endpoint
-// *
-// * @public
-// * @param url - The URL to check
-// * @returns True if the URL is a custom domain
-// */
-//const isCustomDomain = (url: string): boolean => {
-//  return url.match(eventDomainPattern) === null
-//}
 
 /**
  * Determines if a URL is a standard AWS AppSync endpoint
@@ -525,6 +526,16 @@ export class AppSyncEventsClient {
     this.ws.send(JSON.stringify(publishMessage))
   }
 
+  /**
+   * Publishes data to a specified channel with status callback
+   *
+   * Similar to publish() but provides status updates through the callback function.
+   * @public
+   * @param channel - The channel to publish to
+   * @param callback - Function called with status updates ('PENDING', 'SUCCESS', 'ERROR')
+   * @param data - The data to publish (will be serialized to JSON). Maximum 5 events.
+   * @throws Error if not connected to WebSocket, channel contains wildcards, or data validation fails
+   */
   public async publishWithCallback(channel: string, callback: MessageCallback, ...data: any[]) {
     if (!this.isConnected || !this.ws) {
       throw new Error('WebSocket is not connected')

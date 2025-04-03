@@ -5,10 +5,16 @@ import { AppSyncEventsClient, Channel, MessageCallback } from './appsync-events-
  * React hook for subscribing to an AppSync Events channel.
  * Automatically handles subscription management and cleanup.
  *
+ * This hook manages the lifecycle of a channel subscription, including:
+ * - Creating and maintaining the subscription
+ * - Handling connection state changes
+ * - Proper cleanup on unmount
+ * - Error handling
+ *
  * @param client - The AppSyncEventsClient instance
  * @param path - The channel path to subscribe to
  * @param callback - Optional callback function invoked when events are received
- * @returns A tuple containing [channel, isReady flag]
+ * @returns Object containing {channel, isReady, isError, error}
  */
 export function useChannel<T = any>(
   client: AppSyncEventsClient,

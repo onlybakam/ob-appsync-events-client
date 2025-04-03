@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import { useChannel } from '../lib/react-hooks'
+import { act, renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppSyncEventsClient, type Channel } from '../lib/appsync-events-client'
+import { useChannel } from '../lib/react-hooks'
 
 // Define a custom type for our mocked client
 interface MockClientType extends AppSyncEventsClient {
@@ -38,12 +38,12 @@ describe('React Hooks', () => {
 
   describe('useChannel', () => {
     it('should return a channel and isReady=false initially', async () => {
-      let result
+      let result: any
       await act(async () => {
         result = renderHook(() => useChannel(mockClient, 'test/channel')).result
       })
 
-      const [channel, isReady] = result.current
+      const { channel, isReady } = result.current
 
       expect(channel).toHaveProperty('id')
       expect(channel).toHaveProperty('publish')

@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import WS from 'jest-websocket-mock'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  AppSyncEventsClient,
   AWS_APPSYNC_EVENTS_SUBPROTOCOL,
+  AppSyncEventsClient,
   type ProtocolMessage,
 } from '../lib/appsync-events-client'
-import WS from 'jest-websocket-mock'
 
 function fromAuthProtocol(auth: string) {
   return JSON.parse(
