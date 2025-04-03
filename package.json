@@ -9,7 +9,7 @@
     "build": "tsc -b ./tsconfig.lib.json && vite build",
     "lint": "eslint .",
     "format": "npx @biomejs/biome format . --write",
-    "preview": "vite preview",
+    "preview": "tsc -b ./tsconfig.app.json && vite preview",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",

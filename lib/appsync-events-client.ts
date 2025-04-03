@@ -31,6 +31,8 @@ export type Channel = {
 
   /** Function to publish directly to the channel */
   publish: (...events: any[]) => void
+
+  publishWithCallback: (callback: MessageCallback, ...events: any[]) => void
 }
 
 /**
@@ -175,6 +177,9 @@ interface ProtocolError {
   message: string
 }
 
+export type MessageStatus = 'PENDING' | 'SUCCESS' | 'ERROR'
+export type MessageCallback = (status: MessageStatus) => void
+
 /**
  * Formats authentication data for the WebSocket subprotocol header
  *
@@ -238,6 +243,8 @@ export class AppSyncEventsClient {
 
   /** Map of active subscriptions by subscription ID */
   private subscriptions = new Map<string, Subscription<any>>()
+
+  private messageCallbacks = new Map<string, MessageCallback>()
 
   /** Connection state flag */
   private isConnected = false
@@ -367,7 +374,11 @@ export class AppSyncEventsClient {
               } else if (message.type === 'subscribe_success') {
                 this.handleSubscribeSuccess(message)
               } else if (message.type === 'subscribe_error') {
-                this.handlerSubscribeError(message)
+                this.handleSubscribeError(message)
+              } else if (message.type === 'publish_success') {
+                this.handlePublishResponse(message)
+              } else if (message.type === 'publish_error') {
+                this.handlePublishResponse(message)
               } else if (message.type === 'error') {
                 this.handleError(message)
               }
@@ -401,6 +412,16 @@ export class AppSyncEventsClient {
     }
   }
 
+  private handlePublishResponse(
+    message: ProtocolMessage.PublishErrorMessage | ProtocolMessage.PublishSuccessMessage,
+  ) {
+    const callback = this.messageCallbacks.get(message.id)
+    if (callback) {
+      callback(message.type === 'publish_success' ? 'SUCCESS' : 'ERROR')
+      this.messageCallbacks.delete(message.id)
+    }
+  }
+
   /**
    * Handles general protocol error messages
    * @internal
@@ -415,7 +436,7 @@ export class AppSyncEventsClient {
    * @internal
    * @param message - Subscribe error message from server
    */
-  private handlerSubscribeError(message: ProtocolMessage.SubscribeErrorMessage) {
+  private handleSubscribeError(message: ProtocolMessage.SubscribeErrorMessage) {
     const subscription = this.subscriptions.get(message.id)
     if (!subscription) {
       return
@@ -437,12 +458,23 @@ export class AppSyncEventsClient {
     }
     this.debug(`subscription ${message.id} ready`)
     subscription.ready = true
-    subscription.channel = {
-      id: message.id,
-      unsubscribe: () => this.unsubscribe(message.id),
-      publish: (...data) => this.publish(subscription.path, ...data),
-    }
+    subscription.channel = this.createChannel(subscription.path, message.id)
     subscription.resolve(subscription.channel)
+  }
+
+  private createChannel(path: string, id?: string) {
+    const channel: Channel = {
+      id: id ?? '<not-subscribed-publish-only>',
+      unsubscribe: () => {
+        if (id) {
+          this.unsubscribe(id)
+        }
+      },
+      publish: (...events: any[]) => this.publish(path, ...events),
+      publishWithCallback: (callback: MessageCallback, ...events: any[]) =>
+        this.publishWithCallback(path, callback, ...events),
+    }
+    return channel
   }
 
   /**
@@ -493,6 +525,33 @@ export class AppSyncEventsClient {
     this.ws.send(JSON.stringify(publishMessage))
   }
 
+  public async publishWithCallback(channel: string, callback: MessageCallback, ...data: any[]) {
+    if (!this.isConnected || !this.ws) {
+      throw new Error('WebSocket is not connected')
+    }
+
+    if (channel.endsWith('/*')) {
+      throw new Error(`Cannot publish to channel with '*' in path: ${channel}`)
+    }
+
+    if (data.length === 0 || data.length > 5) {
+      throw new Error('You can publish up to 5 events at a time')
+    }
+
+    const publishMessage: ProtocolMessage.PublishMessage = {
+      id: crypto.randomUUID(),
+      type: 'publish',
+      channel,
+      events: data.map((d) => JSON.stringify(d)),
+      authorization: await this.getAuthHeaders(),
+    }
+
+    callback('PENDING')
+    this.messageCallbacks.set(publishMessage.id, callback)
+
+    this.ws.send(JSON.stringify(publishMessage))
+  }
+
   /**
    * Gets a channel for publishing without subscribing to events
    *
@@ -502,11 +561,7 @@ export class AppSyncEventsClient {
    */
   public async getChannel(path: string) {
     await this.connect()
-    return {
-      id: '<not-subscribed>',
-      unsubscribe: () => {}, //no-op
-      publish: (...data: any[]) => this.publish(path, ...data),
-    } as Channel
+    return this.createChannel(path)
   }
 
   /**
@@ -562,13 +617,18 @@ export class AppSyncEventsClient {
       throw new Error('WebSocket is not connected')
     }
 
+    const deleted = this.subscriptions.delete(subscriptionId)
+    if (!deleted) {
+      // subscription did not exist;
+      return
+    }
+
     const unsubscribeMessage: ProtocolMessage.UnsubscribeMessage = {
       type: 'unsubscribe',
       id: subscriptionId,
     }
 
     this.ws.send(JSON.stringify(unsubscribeMessage))
-    this.subscriptions.delete(subscriptionId)
   }
 
   /**

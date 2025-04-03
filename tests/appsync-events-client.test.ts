@@ -506,7 +506,7 @@ describe('AppSyncEventsClient', () => {
     const channel = await client.getChannel('test/channel')
 
     expect(channel).toBeDefined()
-    expect(channel.id).toBe('<not-subscribed>')
+    expect(channel.id).toBe('<not-subscribed-publish-only>')
 
     channel.publish(testData)
 

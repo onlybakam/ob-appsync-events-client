@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AppSyncEventsClient, Channel } from './appsync-events-client'
+import { AppSyncEventsClient, Channel, MessageCallback } from './appsync-events-client'
 
 /**
  * React hook for subscribing to an AppSync Events channel.
@@ -59,9 +59,7 @@ export function useChannel<T = any>(
         client
           .getChannel(path)
           .then(handle, onError)
-          .catch((error) => {
-            console.error(`Error getting publishing channel ${path}:`, error)
-          })
+          .catch((error) => onError(error))
       } else {
         const handleCallback = (data: T) => {
           if (isMounted && callbackRef.current) {
@@ -72,9 +70,7 @@ export function useChannel<T = any>(
         client
           .subscribe<T>(path, handleCallback)
           .then(handle, onError)
-          .catch((error) => {
-            console.error(`Error subscribing to channel ${path}:`, error)
-          })
+          .catch((error) => onError(error))
       }
     } catch (error) {
       setIsReady(false)
@@ -90,18 +86,21 @@ export function useChannel<T = any>(
         channelRef.current.unsubscribe()
         channelRef.current = undefined
         setIsReady(false)
+        setIsError(false)
+        setError(undefined)
       }
     }
   }, [client, client.connected, path]) // Only re-run if client or channel changes
 
-  // Create a stable reference to the subscription that doesn't change on each render
   /**
-   * Stable subscription reference that persists across renders
+   * Stable channel reference that persists across renders
    * @internal
    */
   const channel: Channel = {
     id: channelRef.current?.id ?? 'n/a',
     publish: (...events: any[]) => channelRef.current?.publish(...events),
+    publishWithCallback: (callback: MessageCallback, ...events: any[]) =>
+      channelRef.current?.publishWithCallback(callback, ...events),
     unsubscribe: () => channelRef.current?.unsubscribe(),
   }
 
