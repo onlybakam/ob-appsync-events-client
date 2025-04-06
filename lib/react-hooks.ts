@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { AppSyncEventsClient, Channel, MessageCallback } from './appsync-events-client'
+import { useCallback, useEffect, useRef } from 'react'
+import { AppSyncEventsClient, Channel, ClientNotPublished } from './appsync-events-client'
 
 /**
  * React hook for subscribing to an AppSync Events channel.
@@ -23,9 +23,6 @@ export function useChannel<T = any>(
 ) {
   const channelRef = useRef<Channel>(undefined)
   const callbackRef = useRef(callback)
-  const [isReady, setIsReady] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const [error, setError] = useState<Error>()
 
   // Update callback ref when it changes
   useEffect(() => {
@@ -43,21 +40,13 @@ export function useChannel<T = any>(
     const handle = (channel: Channel) => {
       if (isMounted) {
         channelRef.current = channel
-        setIsReady(true)
-        setIsError(false)
-        setError(undefined)
       } else {
         channel.unsubscribe()
-        setIsReady(false)
-        setIsError(false)
-        setError(undefined)
       }
     }
 
     const onError = (error: Error) => {
-      setIsReady(false)
-      setIsError(true)
-      setError(error)
+      console.warn(error)
     }
 
     try {
@@ -79,9 +68,7 @@ export function useChannel<T = any>(
           .catch((error) => onError(error))
       }
     } catch (error) {
-      setIsReady(false)
-      setIsError(true)
-      setError(error as Error)
+      console.warn(error)
     }
 
     // Cleanup function to unsubscribe when unmounting
@@ -91,24 +78,22 @@ export function useChannel<T = any>(
       if (channelRef.current) {
         channelRef.current.unsubscribe()
         channelRef.current = undefined
-        setIsReady(false)
-        setIsError(false)
-        setError(undefined)
       }
     }
   }, [client, client.connected, path]) // Only re-run if client or channel changes
 
-  /**
-   * Stable channel reference that persists across renders
-   * @internal
-   */
-  const channel: Channel = {
-    id: channelRef.current?.id ?? 'n/a',
-    publish: (...events: any[]) => channelRef.current?.publish(...events),
-    publishWithCallback: (callback: MessageCallback, ...events: any[]) =>
-      channelRef.current?.publishWithCallback(callback, ...events),
-    unsubscribe: () => channelRef.current?.unsubscribe(),
+  return {
+    isReady: useCallback(() => !!channelRef.current, []),
+    unsubscribe: useCallback(() => {
+      channelRef.current?.unsubscribe()
+    }, []),
+    publish: useCallback((...events: any[]) => {
+      if (channelRef.current) {
+        return channelRef.current.publish(...events)
+      }
+      return Promise.resolve<ClientNotPublished>({
+        type: 'client_not_published',
+      })
+    }, []),
   }
-
-  return { channel, isReady, isError, error }
 }

@@ -43,13 +43,11 @@ describe('React Hooks', () => {
         result = renderHook(() => useChannel(mockClient, 'test/channel')).result
       })
 
-      const { channel, isReady } = result.current
+      const { publish, unsubscribe, isReady } = result.current
 
-      expect(channel).toHaveProperty('id')
-      expect(channel).toHaveProperty('publish')
-      expect(channel).toHaveProperty('unsubscribe')
-      // The mock implementation resolves immediately, so isReady will be true
-      expect(isReady).toBe(true)
+      expect(publish).toBeTypeOf('function')
+      expect(unsubscribe).toBeTypeOf('function')
+      expect(isReady).toBeTypeOf('function')
     })
 
     it('should call getChannel when no callback is provided', async () => {

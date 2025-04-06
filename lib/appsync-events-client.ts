@@ -30,9 +30,7 @@ export type Channel = {
   unsubscribe: () => void
 
   /** Function to publish directly to the channel */
-  publish: (...events: any[]) => void
-
-  publishWithCallback: (callback: MessageCallback, ...events: any[]) => void
+  publish: (...events: any[]) => ReturnType<AppSyncEventsClient['publish']>
 }
 
 /**
@@ -63,7 +61,7 @@ interface Subscription<T> {
 }
 
 /**
- * Authentication protocol for AppSync operations
+ * Authentication protocol for A
  * @internal
  */
 type AuthProtocol = { 'x-api-key': string } | { authorization: string }
@@ -166,6 +164,10 @@ export namespace ProtocolMessage {
   }
 }
 
+export interface ClientNotPublished {
+  type: 'client_not_published'
+}
+
 /**
  * Error structure returned by the AppSync protocol
  * @internal
@@ -177,17 +179,13 @@ interface ProtocolError {
   message: string
 }
 
-/**
- * Status of a published message through the AppSync Events API
- * @public
- */
-export type MessageStatus = 'PENDING' | 'SUCCESS' | 'ERROR'
-
-/**
- * Callback function type for handling message publish status updates
- * @public
- */
-export type MessageCallback = (status: MessageStatus) => void
+type MessageTracker = {
+  resolve: (
+    arg: ProtocolMessage.PublishSuccessMessage | ProtocolMessage.PublishErrorMessage,
+  ) => void
+  reject: (arg: any) => void
+  timeoutID: ReturnType<typeof setTimeout>
+}
 
 /**
  * Encodes auth data as a base64url string for use in WebSocket protocol headers.
@@ -245,7 +243,7 @@ export class AppSyncEventsClient {
   /** Map of active subscriptions by subscription ID */
   private subscriptions = new Map<string, Subscription<any>>()
 
-  private messageCallbacks = new Map<string, MessageCallback>()
+  private messages = new Map<string, MessageTracker>()
 
   /** Connection state flag */
   private isConnected = false
@@ -256,6 +254,27 @@ export class AppSyncEventsClient {
 
   public get status() {
     return this.ws?.readyState ?? -1
+  }
+
+  public getChannelSnapshot() {
+    const snapshot = new Map<string, Channel>()
+    this.subscriptions.forEach((subscription) => {
+      if (subscription.channel) {
+        snapshot.set(subscription.path, subscription.channel)
+      }
+    })
+    return snapshot
+  }
+
+  private listeners = new Set<any>()
+  public subscribeToChannels(listener: any) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+  public updateListeners() {
+    for (let listener of this.listeners) {
+      listener()
+    }
   }
 
   /** Current count of reconnection attempts */
@@ -416,10 +435,11 @@ export class AppSyncEventsClient {
   private handlePublishResponse(
     message: ProtocolMessage.PublishErrorMessage | ProtocolMessage.PublishSuccessMessage,
   ) {
-    const callback = this.messageCallbacks.get(message.id)
-    if (callback) {
-      callback(message.type === 'publish_success' ? 'SUCCESS' : 'ERROR')
-      this.messageCallbacks.delete(message.id)
+    const tracker = this.messages.get(message.id)
+    if (tracker) {
+      this.messages.delete(message.id)
+      clearTimeout(tracker.timeoutID)
+      tracker.resolve(message)
     }
   }
 
@@ -461,6 +481,7 @@ export class AppSyncEventsClient {
     subscription.ready = true
     subscription.channel = this.createChannel(subscription.path, message.id)
     subscription.resolve(subscription.channel)
+    this.updateListeners()
   }
 
   private createChannel(path: string, id?: string) {
@@ -472,8 +493,6 @@ export class AppSyncEventsClient {
         }
       },
       publish: (...events: any[]) => this.publish(path, ...events),
-      publishWithCallback: (callback: MessageCallback, ...events: any[]) =>
-        this.publishWithCallback(path, callback, ...events),
     }
     return channel
   }
@@ -515,7 +534,7 @@ export class AppSyncEventsClient {
       throw new Error('You can publish up to 5 events at a time')
     }
 
-    const publishMessage: ProtocolMessage.PublishMessage = {
+    const message: ProtocolMessage.PublishMessage = {
       id: crypto.randomUUID(),
       type: 'publish',
       channel,
@@ -523,44 +542,15 @@ export class AppSyncEventsClient {
       authorization: await this.getAuthHeaders(),
     }
 
-    this.ws.send(JSON.stringify(publishMessage))
-  }
-
-  /**
-   * Publishes data to a specified channel with status callback
-   *
-   * Similar to publish() but provides status updates through the callback function.
-   * @public
-   * @param channel - The channel to publish to
-   * @param callback - Function called with status updates ('PENDING', 'SUCCESS', 'ERROR')
-   * @param data - The data to publish (will be serialized to JSON). Maximum 5 events.
-   * @throws Error if not connected to WebSocket, channel contains wildcards, or data validation fails
-   */
-  public async publishWithCallback(channel: string, callback: MessageCallback, ...data: any[]) {
-    if (!this.isConnected || !this.ws) {
-      throw new Error('WebSocket is not connected')
-    }
-
-    if (channel.endsWith('/*')) {
-      throw new Error(`Cannot publish to channel with '*' in path: ${channel}`)
-    }
-
-    if (data.length === 0 || data.length > 5) {
-      throw new Error('You can publish up to 5 events at a time')
-    }
-
-    const publishMessage: ProtocolMessage.PublishMessage = {
-      id: crypto.randomUUID(),
-      type: 'publish',
-      channel,
-      events: data.map((d) => JSON.stringify(d)),
-      authorization: await this.getAuthHeaders(),
-    }
-
-    callback('PENDING')
-    this.messageCallbacks.set(publishMessage.id, callback)
-
-    this.ws.send(JSON.stringify(publishMessage))
+    return new Promise<ProtocolMessage.PublishSuccessMessage | ProtocolMessage.PublishErrorMessage>(
+      (resolve, reject) => {
+        const timeoutID = setTimeout(() => {
+          reject(new Error('Publish time out after 30 seconds'))
+        }, 30_000)
+        this.messages.set(message.id, { resolve, reject, timeoutID })
+        this.ws?.send(JSON.stringify(message))
+      },
+    )
   }
 
   /**

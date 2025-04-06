@@ -23,12 +23,13 @@ function selectProtocol(ps: string[]) {
 }
 
 // Mock crypto.randomUUID for consistent test results
-vi.spyOn(crypto, 'randomUUID').mockImplementation(() => 'a-b-c-d-e')
+const MOCK_UUID = 'mocked-uuid-value-aaaa-bbbb'
 
 let server: WS
 describe('AppSyncEventsClient', () => {
   beforeEach(() => {
     // Silence console.error for tests
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(MOCK_UUID)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server = new WS('wss://localhost:1234/event/realtime', {
       selectProtocol,
@@ -392,7 +393,7 @@ describe('AppSyncEventsClient', () => {
 
     // Publish to a channel
     const testData = { message: 'Hello, world!' }
-    await client.publish('test/channel', testData)
+    const resp = client.publish('test/channel', testData)
 
     const messageData = (await server.nextMessage) as ProtocolMessage.PublishMessage
 
@@ -400,19 +401,29 @@ describe('AppSyncEventsClient', () => {
     expect(messageData.channel).toBe('test/channel')
     expect(messageData.events.length).toBe(1)
     expect(JSON.parse(messageData.events[0])).toEqual(testData)
+
+    const message: ProtocolMessage.PublishSuccessMessage = {
+      type: 'publish_success',
+      id: MOCK_UUID,
+      failed: [],
+      successful: [],
+    }
+    server.send(message)
+    await resp
   })
 
   it('should publish multiple events in a single call', async () => {
     const client = new AppSyncEventsClient('localhost:1234', {
       apiKey: 'api-key',
     })
+    const handleSpy = vi.spyOn(client as any, 'handlePublishResponse')
     await client.connect()
 
     const event1 = { type: 'create', id: '123' }
     const event2 = { type: 'update', id: '456' }
     const event3 = { type: 'delete', id: '789' }
 
-    await client.publish('test/channel', event1, event2, event3)
+    const resp = client.publish('test/channel', event1, event2, event3)
 
     const msg = (await server.nextMessage) as ProtocolMessage.PublishMessage
 
@@ -420,6 +431,16 @@ describe('AppSyncEventsClient', () => {
     expect(JSON.parse(msg.events[0])).toEqual(event1)
     expect(JSON.parse(msg.events[1])).toEqual(event2)
     expect(JSON.parse(msg.events[2])).toEqual(event3)
+
+    const message: ProtocolMessage.PublishSuccessMessage = {
+      type: 'publish_success',
+      id: MOCK_UUID,
+      failed: [],
+      successful: [],
+    }
+    server.send(message)
+    expect(handleSpy).toHaveBeenCalledOnce()
+    await resp
   })
 
   it('should throw error when publishing to wildcard channel', async () => {
