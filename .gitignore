@@ -22,6 +22,7 @@ index.html
 # Local files
 *.local
 .env.local
+.env
 config.json
 coverage
 
