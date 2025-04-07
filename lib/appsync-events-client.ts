@@ -164,6 +164,10 @@ export namespace ProtocolMessage {
   }
 }
 
+/**
+ * Response indicating client publish action was not completed
+ * @public
+ */
 export interface ClientNotPublished {
   type: 'client_not_published'
 }
@@ -179,6 +183,10 @@ interface ProtocolError {
   message: string
 }
 
+/**
+ * Tracks outgoing publish messages and their responses
+ * @internal
+ */
 type MessageTracker = {
   resolve: (
     arg: ProtocolMessage.PublishSuccessMessage | ProtocolMessage.PublishErrorMessage,
@@ -243,38 +251,26 @@ export class AppSyncEventsClient {
   /** Map of active subscriptions by subscription ID */
   private subscriptions = new Map<string, Subscription<any>>()
 
+  /** Map of publish message IDs to their response trackers */
   private messages = new Map<string, MessageTracker>()
 
   /** Connection state flag */
   private isConnected = false
 
+  /**
+   * Returns the connection status of the client
+   * @returns Boolean indicating if client is connected
+   */
   public get connected() {
     return this.isConnected
   }
 
+  /**
+   * Returns the WebSocket connection state
+   * @returns WebSocket readyState value or -1 if not connected
+   */
   public get status() {
     return this.ws?.readyState ?? -1
-  }
-
-  public getChannelSnapshot() {
-    const snapshot = new Map<string, Channel>()
-    this.subscriptions.forEach((subscription) => {
-      if (subscription.channel) {
-        snapshot.set(subscription.path, subscription.channel)
-      }
-    })
-    return snapshot
-  }
-
-  private listeners = new Set<any>()
-  public subscribeToChannels(listener: any) {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-  public updateListeners() {
-    for (let listener of this.listeners) {
-      listener()
-    }
   }
 
   /** Current count of reconnection attempts */
@@ -432,6 +428,11 @@ export class AppSyncEventsClient {
     }
   }
 
+  /**
+   * Handles publish response messages from the server
+   * @internal
+   * @param message - Success or error message returned after publish operation
+   */
   private handlePublishResponse(
     message: ProtocolMessage.PublishErrorMessage | ProtocolMessage.PublishSuccessMessage,
   ) {
@@ -481,9 +482,15 @@ export class AppSyncEventsClient {
     subscription.ready = true
     subscription.channel = this.createChannel(subscription.path, message.id)
     subscription.resolve(subscription.channel)
-    this.updateListeners()
   }
 
+  /**
+   * Creates a channel object for a given path and subscription ID
+   * @internal
+   * @param path - The channel path
+   * @param id - Optional subscription ID (if it's a subscribed channel)
+   * @returns A Channel object for the specified path
+   */
   private createChannel(path: string, id?: string) {
     const channel: Channel = {
       id: id ?? '<not-subscribed-publish-only>',
